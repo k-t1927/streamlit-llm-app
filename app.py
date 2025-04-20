@@ -3,10 +3,40 @@ import os
 import streamlit as st
 from langchain_openai import ChatOpenAI
 from langchain.schema import SystemMessage, HumanMessage
+from openai import OpenAI
+
 
 # 環境変数の読み込み
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
+
+# OpenAI APIキーを取得する関数(ローカルでもCloudでも動作するように)
+def resolve_openai_api_key() -> str:
+    """
+    ① 環境変数 ② st.secrets の順で OPENAI_API_KEY を探す。
+       見つかれば os.environ にもセットして返す。
+    """
+    # 1️⃣ .env / 手動 export / Cloud が自動注入した環境変数
+    key = os.getenv("OPENAI_API_KEY")
+    if key:
+        return key
+
+    # 2️⃣ Streamlit Cloud の secrets.toml / ダッシュボード Secrets
+    try:
+        import streamlit as st
+        if "OPENAI_API_KEY" in st.secrets:
+            key = st.secrets["OPENAI_API_KEY"]
+            os.environ["OPENAI_API_KEY"] = key   # LangChain が自動参照できるように
+            return key
+    except ModuleNotFoundError:
+        pass  # st が無い＝純粋な Python 実行環境
+
+    raise RuntimeError(
+        "OPENAI_API_KEY が見つかりません。"
+        "ローカルでは .env、Streamlit Cloud では Secrets に設定してください。"
+    )
+
+# OpenAI APIキーを取得
+openai_api_key = resolve_openai_api_key()
 
 # LangChainのLLMインスタンスを作成
 llm = ChatOpenAI(model_name="gpt-4", temperature=0)
@@ -38,7 +68,7 @@ def get_llm_response(input_text, expert_type):
     ]
 
     # LLMにメッセージを渡して回答を取得
-    result = llm(messages)
+    result = llm.invoke(messages)
     return result.content
 
 # StreamlitアプリのUI構築
